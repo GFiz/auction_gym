@@ -34,7 +34,7 @@ class ValuationMeta(ABCMeta):
 class BaseValuation(ABC, metaclass=ValuationMeta):
     """Abstract base class for valuation models."""
     
-    @abstractmethod
+    @abstractmethod 
     def get_distribution(self, observation: Optional[np.ndarray] = None) -> Distribution:
         pass
     
@@ -43,15 +43,6 @@ class BaseValuation(ABC, metaclass=ValuationMeta):
         sample = dist.sample()
         return max(0.0, float(sample.item()))
     
-    @classmethod
-    def get_available_valuation_types(cls) -> list[str]:
-        return cls.__class__.get_available_valuation_types()
-    
-    @classmethod
-    def get_valuation_class(cls, valuation_type: str) -> type:
-        return cls.__class__.get_valuation_class(valuation_type)
-
-
 class DeterministicValuation(BaseValuation):
     valuation_type = "deterministic"
     
@@ -77,7 +68,7 @@ class UniformValuation(BaseValuation):
             raise ValueError("High bound must be greater than or equal to low bound.")
         self.low = torch.tensor(low, dtype=torch.float32)
         self.high = torch.tensor(high, dtype=torch.float32)
-    
+
     def get_distribution(self, observation: Optional[np.ndarray] = None) -> Distribution:
         return Uniform(self.low, self.high)
 

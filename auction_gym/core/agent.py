@@ -1,162 +1,108 @@
+import torch
 import numpy as np
 import gymnasium as gym
 from gymnasium import spaces
 from abc import ABC, abstractmethod, ABCMeta
-from typing import Union, Callable, Dict, Any
-from .valuation import BaseValuation, DeterministicValuation
-from .utility import BaseUtility, LinearUtility
+from typing import Dict, Any, Optional
+from dataclasses import dataclass
+from ray.rllib.policy.torch_policy import TorchPolicy
+from .valuation import ValuationMeta
+from .utility import UtilityMeta
+from .model import ModelMeta
 
 
-class AgentMeta(ABCMeta):
-    """Metaclass for automatic agent type registration."""
+@dataclass
+class BiddingAgentConfig:
+    """Simple configuration dataclass for BiddingAgent."""
+    valuation_type: str = "deterministic"
+    utility_type: str = "linear"
+    model_type: str = "linear"
+    is_trainable: bool = True
+    valuation_config: Dict[str, Any] = {'value':0.5}
+    utility_config: Dict[str, Any] = {}
+    model_config: Dict[str, Any] = {}
     
-    # Registry is stored in the metaclass, not the base class
-    _registry = {}
-    
-    def __new__(mcs, name, bases, namespace):
-        cls = super().__new__(mcs, name, bases, namespace)
-        
-        # Only register concrete classes (not abstract base classes)
-        if bases and not getattr(cls, '__abstractmethods__', None):
-            # Try to get agent_type from class attributes first
-            if 'agent_type' in namespace:
-                agent_type = namespace['agent_type']
-                mcs._registry[agent_type] = cls
-        
-        return cls
-    
-    @classmethod
-    def get_available_agent_types(mcs) -> list[str]:
-        """Get all registered agent types."""
-        return list(mcs._registry.keys())
-    
-    @classmethod
-    def get_agent_class(mcs, agent_type: str) -> type:
-        """Get agent class for a given type."""
-        if agent_type not in mcs._registry:
-            raise ValueError(f"Agent type '{agent_type}' not registered. Available types: {list(mcs._registry.keys())}")
-        return mcs._registry[agent_type]
     
 
-class BaseAgent(ABC, metaclass=AgentMeta):
-    """Abstract base class for auction agents."""
+class BiddingAgent(TorchPolicy):
+    """Abstract base class for auction agents that are also RLlib policies."""
     
-    def __init__(self, action_space: spaces.Space, valuation: BaseValuation, utility: BaseUtility = LinearUtility(), is_trainable: bool = True):
+    def __init__(self, observation_space, action_space, config):
         """
-        Initialize the agent.
+        Initialize the agent as a TorchPolicy.
         
         Args:
-            action_space: The action space for this agent.
-            valuation: The valuation model for the agent.
-            utility: The utility function for the agent (defaults to LinearUtility).
-            is_trainable: Whether this agent can be trained by RLlib (defaults to True).
+            observation_space: The observation space for the environment.
+            action_space: The action space for the environment.
+            config: Configuration dictionary or BiddingAgentConfig object containing agent parameters.
         """
-        self.action_space = action_space
-        self.valuation = valuation
-        self.utility = utility
-        self.is_trainable = is_trainable
-        
-    @abstractmethod
-    def act(self, observation: np.ndarray) -> float:
-        """
-        Choose an action based on the current observation.
-        
-        Args:
-            observation: Current environment observation.
+        # Convert dict to config if needed
+        if isinstance(config, dict):
+            self.config = BiddingAgentConfig(**config)
+        else:
+            self.config = config
             
-        Returns:
-            The chosen action (bid amount).
-        """
-        raise NotImplementedError
-    
-    def get_valuation(self, observation: np.ndarray) -> float:
-        """
-        Get the agent's valuation for the current item.
+        # Extract agent-specific config
+        self.valuation_type = self.config.valuation_type
+        self.utility_type = self.config.utility_type
+        self.model_type = self.config.model_type
+        self.is_trainable = self.config.is_trainable
         
-        Args:
-            observation: The current environment observation.
-            
-        Returns:
-            The agent's valuation.
-        """
-        return self.valuation(observation)
+        # Create valuation and utility components
+        self.valuation = self._create_valuation()
+        self.utility = self._create_utility()
+        self.model = self._build_model()
+        # Initialize TorchPolicy
+        super().__init__(observation_space, action_space, config)
+
+    def _build_model(self):
+        """Create the neural network model using the model registry."""
+        model_class = ModelMeta.get_model_class(self.model_type)
+        model = model_class(
+            self.observation_space,
+            self.action_space,
+            self.action_space.shape[0],  # num_outputs
+            self.config.model_config,
+            f"{self.model_type}_auction_model"
+        )
+        return model
     
-    def calculate_utility(self, won: bool, valuation: float, payment: float) -> float:
-        """
-        Calculate the agent's utility given the auction outcome.
-        
-        Args:
-            won: Whether the agent won the auction.
-            valuation: The agent's valuation for the item.
-            payment: The amount the agent has to pay.
-            
-        Returns:
-            The agent's utility (reward).
-        """
-        return self.utility(won=won, valuation=valuation, payment=payment)
+    def _create_valuation(self):
+        """Create the valuation component."""
+        valuation_class = ValuationMeta.get_valuation_class(self.valuation_type)
+        return valuation_class(**self.config.valuation_config)
     
-    def reset(self) -> None:
-        """Reset the agent's internal state."""
-        pass
+    def _create_utility(self):
+        """Create the utility component."""
+        utility_class = UtilityMeta.get_utility_class(self.utility_type)
+        return utility_class(**self.config.utility_config)
+    
+    # Additional utility methods
+    def get_model(self):
+        """Get the neural network model."""
+        return self.model
+    
+    def get_config(self):
+        """Get the agent configuration."""
+        return self.config
+    
+    def is_trainable_agent(self) -> bool:
+        """Check if this agent is trainable."""
+        return self.is_trainable
+    
+    def get_valuation_type(self) -> str:
+        """Get the valuation type."""
+        return self.valuation_type
+    
+    def get_utility_type(self) -> str:
+        """Get the utility type."""
+        return self.utility_type
+    
+    def get_model_type(self) -> str:
+        """Get the model type."""
+        return self.model_type
+
     
 
-
-class RandomAgent(BaseAgent):
-    """Agent that chooses actions randomly from the action space."""
-    agent_type = "random"
-    def __init__(self, action_space: spaces.Space, valuation: BaseValuation, utility: BaseUtility = LinearUtility(), is_trainable: bool = True):
-        super().__init__(action_space, valuation, utility, is_trainable)
-
-    def act(self, observation: np.ndarray) -> float:
-        """
-        Choose a random action from the action space.
-        
-        Args:
-            observation: Current environment observation (unused).
-            
-        Returns:
-            Random action from the action space.
-        """
-        return self.action_space.sample() 
-
-
-class LinearAgent(BaseAgent):
-    """Agent that bids linearly: bid = lambda * valuation."""
-    agent_type = "linear"
-    def __init__(self, action_space: spaces.Space, valuation: BaseValuation, lambda_param: float = 1.0, utility: BaseUtility = LinearUtility(), is_trainable: bool = True):
-        """
-        Initialize linear agent.
-        
-        Args:
-            action_space: The action space for this agent.
-            valuation: The valuation model for the agent.
-            lambda_param: Linear parameter for bidding (bid = lambda * valuation).
-            utility: The utility function for the agent (defaults to LinearUtility).
-            is_trainable: Whether this agent can be trained by RLlib (defaults to True).
-        """
-        super().__init__(action_space, valuation, utility, is_trainable)
-        self.lambda_param = lambda_param
-    
-    def act(self, observation: np.ndarray) -> float:
-        """
-        Bid linearly: bid = lambda * valuation.
-        
-        Args:
-            observation: Current environment observation.
-            
-        Returns:
-            Linear bid amount.
-        """
-        valuation = self.get_valuation(observation)
-        bid = self.lambda_param * valuation
-        
-        # Ensure bid is within action space bounds
-        if hasattr(self.action_space, 'low') and hasattr(self.action_space, 'high'):
-            bid = np.clip(bid, self.action_space.low, self.action_space.high)
-        
-        # Convert to float properly to avoid numpy deprecation warning
-        if hasattr(bid, 'item'):
-            return bid.item()
-        return float(bid)
 
 

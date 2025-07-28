@@ -28,20 +28,11 @@ class UtilityMeta(ABCMeta):
 
 
 class BaseUtility(ABC, metaclass=UtilityMeta):
-    """Abstract base class for agent utility functions."""
-    
+    """Abstract base class for agent utility functions."""  
     @abstractmethod
     def __call__(self, won: bool, valuation: float, payment: float) -> float:
         pass
-    
-    @classmethod
-    def get_available_utility_types(cls) -> list[str]:
-        return cls.__class__.get_available_utility_types()
-    
-    @classmethod
-    def get_utility_class(cls, utility_type: str) -> type:
-        return cls.__class__.get_utility_class(utility_type)
-
+      
 
 class LinearUtility(BaseUtility):
     utility_type = "linear"

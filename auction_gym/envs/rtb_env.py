@@ -4,7 +4,7 @@ import numpy as np
 from typing import Dict, Any, Tuple, Optional, List
 from ray.rllib.env.multi_agent_env import MultiAgentEnv
 from auction_gym.core.auction import AuctionMechanism, SecondPriceAuction
-from auction_gym.core.agent import BaseAgent
+from auction_gym.core.agent import BiddingAgent
 
 
 class RTBAuctionEnv(MultiAgentEnv):
@@ -16,7 +16,7 @@ class RTBAuctionEnv(MultiAgentEnv):
 
     def __init__(
         self,
-        agents: List[BaseAgent],
+        agents: List[BiddingAgent],
         auction_mechanism: AuctionMechanism = SecondPriceAuction() 
     ):
         super().__init__()
@@ -53,7 +53,7 @@ class RTBAuctionEnv(MultiAgentEnv):
         self.current_step = 0
         
         # In a real scenario, you might generate a new observation here
-        obs = self._get_observation()
+        obs = self._get_valuation_observation()
         info = self._get_info()
         
         # Return multi-agent format: dictionaries mapping agent IDs to their values
@@ -85,17 +85,17 @@ class RTBAuctionEnv(MultiAgentEnv):
         
         winner_idx, payment = self.auction_mechanism.run_auction(bids)
         
-        # Get valuations for this round
-        obs_for_valuation = self._get_observation()
-        valuations = np.array([agent.get_valuation(obs_for_valuation) for agent in self.agent_objects])
+        # Get valuations for this round using agent valuation functions
+        obs_for_valuation = self._get_valuation_observation()
+        valuations = np.array([agent.valuation(obs_for_valuation) for agent in self.agent_objects])
         
-        rewards = self._calculate_rewards(winner_idx, payment, valuations)
+        rewards = self._compute_rewards(winner_idx, payment, valuations)
         
         self.current_step += 1
         terminated = False
         truncated = self.current_step >= self.max_steps
         
-        obs = self._get_observation()
+        obs = self._get_valuation_observation()
         info = self._get_info(winner=winner_idx, payment=payment, bids=bids, valuations=valuations)
         
         # Return multi-agent format: all as dictionaries
@@ -109,32 +109,27 @@ class RTBAuctionEnv(MultiAgentEnv):
         
         return obs_dict, rewards_dict, terminated_dict, truncated_dict, info_dict
 
-    def _calculate_rewards(self, winner_idx: Optional[int], payment: float, valuations: np.ndarray) -> np.ndarray:
+    def _compute_rewards(self, winner_idx: Optional[int], payment: float, valuations: np.ndarray) -> np.ndarray:
         """Calculate rewards for each agent using their own utility functions."""
         rewards = np.zeros(self.n_agents, dtype=np.float32)
         for i in range(self.n_agents):
             won = (i == winner_idx)
-            agent_payment = payment if won else 0.0
-            rewards[i] = self.agent_objects[i].calculate_utility(
+            agent_payment = payment if won else 0.0 #TODO make payments already vecortized in run_aucion
+            rewards[i] = self.agent_objects[i].utility(
                 won=won,
                 valuation=valuations[i],
                 payment=agent_payment
             )
         return rewards
 
-    def _get_observation(self) -> np.ndarray:
+    def _get_valuation_observation(self) -> np.ndarray:
         """Generate the current observation for the agents."""
         # This is a placeholder. In a real environment, this would be meaningful data.
         return np.array([self.current_step / self.max_steps], dtype=np.float32)
 
     def _get_info(self, **kwargs) -> Dict[str, Any]:
         """Get info dictionary for the current step."""
-        info = {
-            "step": self.current_step,
-            "auction_mechanism": type(self.auction_mechanism).__name__
-        }
-        info.update(kwargs)
-        return info
+        return {}
 
     def render(self, mode: str = "human"):
         """Render the environment state."""
