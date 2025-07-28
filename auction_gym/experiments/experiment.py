@@ -453,7 +453,6 @@ class AuctionExperiment:
         """
         self.config = config
         self.experiment_name = config.experiment_name
-        self.num_agents = config.num_agents
         self.algorithm = config.algorithm.upper()
         self.max_steps = config.max_steps
         self.auction_type = config.auction_type
@@ -470,6 +469,11 @@ class AuctionExperiment:
         # Results storage
         self.results = None
         self.checkpoint_path = None
+    
+    @property
+    def num_agents(self) -> int:
+        """Get the number of agents from config."""
+        return self.config.num_agents
     
     def _create_agent_configs(self) -> List[AgentConfig]:
         """Return the agent configurations from the experiment config."""
