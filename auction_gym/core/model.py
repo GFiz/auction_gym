@@ -1,4 +1,3 @@
-# Remove incorrect import
 from ray.rllib.models.torch.torch_modelv2 import TorchModelV2
 import torch.nn as nn
 import torch
