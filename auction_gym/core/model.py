@@ -13,10 +13,10 @@ class ModelMeta(ABCMeta):
     def __new__(mcs, name, bases, namespace):
         cls = super().__new__(mcs, name, bases, namespace)
         
-        if bases and not getattr(cls, '__abstractmethods__', None):
-            if 'model_type' in namespace:
-                model_type = namespace['model_type']
-                mcs._registry[model_type] = cls
+        
+        if 'model_type' in namespace:
+            model_type = namespace['model_type']
+            mcs._registry[model_type] = cls
         
         return cls
     
@@ -30,7 +30,7 @@ class ModelMeta(ABCMeta):
             raise ValueError(f"Model type '{model_type}' not registered. Available types: {list(mcs._registry.keys())}")
         return mcs._registry[model_type]
 
-class LinearModel(TorchModelV2, nn.Module):
+class LinearModel(TorchModelV2, nn.Module, metaclass= ModelMeta):
     """Simple linear model for linear bidding agents."""
     model_type = 'linear'
     
@@ -45,7 +45,7 @@ class LinearModel(TorchModelV2, nn.Module):
         return bid, state
 
 
-class RandomModel(TorchModelV2, nn.Module):
+class RandomModel(TorchModelV2, nn.Module, metaclass= ModelMeta):
     """Model that outputs random actions."""
     model_type = 'random'
     
