@@ -37,13 +37,16 @@ def basic_env():
 def test_env_initialization(basic_env):
     """Test that the environment initializes correctly."""
     assert basic_env.n_agents == 2
-    assert isinstance(basic_env.action_space, spaces.Box)
-    assert basic_env.action_space.shape == (2,)
+    action_space = basic_env.action_spaces['agent_0']
+    assert isinstance(action_space, spaces.Box)
+    assert action_space.shape == (1,)
 
 def test_env_reset(basic_env):
     """Test the reset method."""
     obs, info = basic_env.reset()
-    assert isinstance(obs, np.ndarray)
+    assert 'agent_0' in obs and 'agent_1' in obs
+    agent_obs = obs['agent_0']
+    assert isinstance(agent_obs, np.ndarray)
     assert isinstance(info, dict)
     assert basic_env.current_step == 0
 
@@ -52,20 +55,27 @@ def test_env_step_second_price(basic_env):
     env = basic_env
     obs, info = env.reset()
     
-    # Agents bid their deterministic valuations (0.8 and 0.6)
-    actions = np.array([agent.act(obs) for agent in env.agents])
+    # Agents will use their act() methods - LinearAgent bids lambda * valuation
+    # Agent 0: lambda=1.0 * valuation=0.8 = 0.8
+    # Agent 1: lambda=1.0 * valuation=0.6 = 0.6
+    # Since these are non-trainable agents, we don't provide action_dict
+    action_dict = {}  # Empty action dict for non-trainable agents
+    obs, rewards, terminated, truncated, info = env.step(action_dict)
     
-    next_obs, rewards, terminated, truncated, info = env.step(actions)
-
-    # Winner should be agent 0
-    assert info['winner'] == 0
+    # Check that info contains the expected auction information
+    agent_info = info['agent_0']  # All agents get the same info
+    
+    # Winner should be agent 0 (higher bid of 0.8)
+    assert agent_info['winner'] == 0
     # Payment should be the second-highest bid (0.6)
-    assert info['payment'] == 0.6
+    assert agent_info['payment'] == 0.6
     
-    # Rewards (using LinearUtility: valuation - payment)
+    # Rewards (using LinearUtility: valuation - payment if won, 0 if lost)
     # Agent 0 (winner): 0.8 - 0.6 = 0.2
     # Agent 1 (loser): 0.0
-    assert np.allclose(rewards, [0.2, 0.0])
+    expected_rewards = {'agent_0': 0.2, 'agent_1': 0.0}
+    assert np.allclose(rewards['agent_0'], expected_rewards['agent_0'])
+    assert np.allclose(rewards['agent_1'], expected_rewards['agent_1'])
     
     assert env.current_step == 1
 
@@ -73,25 +83,26 @@ def test_env_with_custom_utility():
     """Test the environment with a custom utility model."""
     agents = [
         LinearAgent(
-            spaces.Box(0,1,(1,)), 
-            DeterministicValuation(0.9),
+            action_space=spaces.Box(low=0, high=1, shape=(1,)), 
+            valuation=DeterministicValuation(0.9),
             utility=RiskAverseUtility()  # Custom utility for first agent
         ),
         LinearAgent(
-            spaces.Box(0,1,(1,)), 
-            DeterministicValuation(0.5),
+            action_space=spaces.Box(low=0, high=1, shape=(1,)), 
+            valuation=DeterministicValuation(0.5),
             utility=LinearUtility()  # Default utility for second agent
         )
     ]
     env = RTBAuctionEnv(agents=agents)
     obs, _ = env.reset()
     
-    actions = np.array([agent.act(obs) for agent in env.agents])
-    _, rewards, _, _, info = env.step(actions)
+    # Step with empty action dict (non-trainable agents use their act() method)
+    _, rewards, _, _, info = env.step({})
     
-    # Agent 0 wins and pays 0.5
+    # Agent 0 wins with bid 0.9 and pays 0.5 (second highest bid)
     # Utility for agent 0 is log(1 + 0.9 - 0.5) = log(1.4)
     expected_reward_0 = np.log(1.4)
-    # Utility for agent 1 is 0
+    # Utility for agent 1 is 0 (didn't win)
     
-    assert np.allclose(rewards, [expected_reward_0, 0.0])
+    assert np.allclose(rewards['agent_0'], expected_reward_0)
+    assert np.allclose(rewards['agent_1'], 0.0)
