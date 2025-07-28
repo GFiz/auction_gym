@@ -7,7 +7,7 @@ from .valuation import BaseValuation, DeterministicValuation
 from .utility import BaseUtility, LinearUtility
 
 
-class BidderMeta(ABCMeta):
+class AgentMeta(ABCMeta):
     """Metaclass for automatic agent type registration."""
     
     # Registry is stored in the metaclass, not the base class
@@ -38,7 +38,7 @@ class BidderMeta(ABCMeta):
         return mcs._registry[agent_type]
     
 
-class BaseBidder(ABC, metaclass=BidderMeta):
+class BaseAgent(ABC, metaclass=AgentMeta):
     """Abstract base class for auction agents."""
     
     def __init__(self, action_space: spaces.Space, valuation: BaseValuation, utility: BaseUtility = LinearUtility(), is_trainable: bool = True):
@@ -101,7 +101,7 @@ class BaseBidder(ABC, metaclass=BidderMeta):
     
 
 
-class RandomBidder(BaseBidder):
+class RandomAgent(BaseAgent):
     """Agent that chooses actions randomly from the action space."""
     agent_type = "random"
     def __init__(self, action_space: spaces.Space, valuation: BaseValuation, utility: BaseUtility = LinearUtility(), is_trainable: bool = True):
@@ -120,7 +120,7 @@ class RandomBidder(BaseBidder):
         return self.action_space.sample() 
 
 
-class LinearBidder(BaseBidder):
+class LinearAgent(BaseAgent):
     """Agent that bids linearly: bid = lambda * valuation."""
     agent_type = "linear"
     def __init__(self, action_space: spaces.Space, valuation: BaseValuation, lambda_param: float = 1.0, utility: BaseUtility = LinearUtility(), is_trainable: bool = True):

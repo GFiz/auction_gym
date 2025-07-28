@@ -19,9 +19,9 @@ def run_single_agent_experiment():
         valuation_type="deterministic",
         utility_type="linear",
         algorithm="PPO",
-        max_steps=50,
+        max_steps=10,
         auction_type="second_price",
-        num_iterations=50,  # Short training for demo
+        num_iterations=10,  # Short training for demo
         checkpoint_freq=10,
         verbose=1,
         # Agent configuration
@@ -197,17 +197,17 @@ def main():
         exp1, results1 = run_single_agent_experiment()
         experiments.append(("Single Agent", exp1, results1))
         
-        # Multi-agent experiment
-        exp2, results2 = run_multi_agent_experiment()
-        experiments.append(("Multi-Agent", exp2, results2))
+        # # Multi-agent experiment
+        # exp2, results2 = run_multi_agent_experiment()
+        # experiments.append(("Multi-Agent", exp2, results2))
         
-        # First-price auction experiment
-        exp3, results3 = run_first_price_experiment()
-        experiments.append(("First-Price", exp3, results3))
+        # # First-price auction experiment
+        # exp3, results3 = run_first_price_experiment()
+        # experiments.append(("First-Price", exp3, results3))
         
-        # Different valuations experiment
-        exp4, results4 = run_valuation_experiment()
-        experiments.append(("Different Valuations", exp4, results4))
+        # # Different valuations experiment
+        # exp4, results4 = run_valuation_experiment()
+        # experiments.append(("Different Valuations", exp4, results4))
         
     except Exception as e:
         print(f"Error during experiment: {e}")
