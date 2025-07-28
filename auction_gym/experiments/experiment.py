@@ -181,7 +181,6 @@ class AuctionExperimentConfig:
     algorithm: str = "PPO"
     max_steps: int = 100
     auction_type: str = "second_price"
-    num_agents: int = None  # Will be inferred from agent_configs if not provided
     agent_configs: List[AgentConfig] = field(default_factory=list)
     
     # Training parameters
@@ -195,19 +194,13 @@ class AuctionExperimentConfig:
     # Environment parameters
     env_params: dict = field(default_factory=dict)
     
+    @property
+    def num_agents(self) -> int:
+        """Get the number of agents from agent_configs."""
+        return len(self.agent_configs)
+    
     def __post_init__(self):
         """Validate and set derived parameters."""
-        # Infer num_agents from agent_configs if not provided
-        if self.num_agents is None:
-            if self.agent_configs:
-                self.num_agents = len(self.agent_configs)
-            else:
-                self.num_agents = 2  # Default
-        
-        # Validate that agent_configs matches num_agents if both are provided
-        if self.agent_configs and len(self.agent_configs) != self.num_agents:
-            raise ValueError(f"Number of agent configs ({len(self.agent_configs)}) doesn't match num_agents ({self.num_agents})")
-        
         # Validate algorithm
         if self.algorithm.upper() not in ["PPO", "SAC", "DQN"]:
             raise ValueError(f"Unsupported algorithm: {self.algorithm}")
@@ -303,7 +296,6 @@ class AuctionExperimentConfig:
         
         return cls(
             experiment_name=experiment_name,
-            num_agents=num_agents,
             agent_configs=agent_configs,
             algorithm=algorithm,
             algorithm_params=algorithm_params,
@@ -381,7 +373,6 @@ class AuctionExperimentConfig:
             "algorithm": self.algorithm,
             "max_steps": self.max_steps,
             "auction_type": self.auction_type,
-            "num_agents": self.num_agents,
             "num_iterations": self.num_iterations,
             "checkpoint_freq": self.checkpoint_freq,
             "verbose": self.verbose,
