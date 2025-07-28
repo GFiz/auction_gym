@@ -4,7 +4,7 @@ from typing import List, Tuple, Optional
 import numpy as np
 
 
-class AuctionMechanismMeta(ABCMeta):
+class MechanismMeta(ABCMeta):
     """Metaclass for automatic auction mechanism registration."""
     
     _registry = {}
@@ -31,7 +31,7 @@ class AuctionMechanismMeta(ABCMeta):
         return mcs._registry[mechanism_type]
 
 
-class AuctionMechanism(ABC, metaclass=AuctionMechanismMeta):
+class AuctionMechanism(ABC, metaclass=MechanismMeta):
     """Abstract base class for auction mechanisms."""
     
     @abstractmethod
@@ -43,9 +43,9 @@ class AuctionMechanism(ABC, metaclass=AuctionMechanismMeta):
         pass
     
     def run_auction(self, bids: List[float]) -> Tuple[int, float]:
-        winner, allocation = self.allocate(bids)
-        payment = self.payment(bids, winner)
-        return winner, payment
+        allocations = self.allocate(bids)
+        payments = self.payment(bids, allocations)
+        return allocations, payments
     
     # Class methods that delegate to the metaclass
     @classmethod
@@ -61,30 +61,30 @@ class SecondPriceAuction(AuctionMechanism):
     mechanism_type = "second_price"
     
     def allocate(self, bids: List[float]) -> Tuple[int, float]:
-        if not bids:
-            return None, 0.0
-        winner = np.argmax(bids)
-        return winner, 1.0
+        winner_idx = np.argmax(bids)
+        allocations = np.arange(len(bids)) == winner_idx
+        return allocations
     
-    def payment(self, bids: List[float], winner: int) -> float:
-        if not bids or winner is None:
-            return 0.0
-        if len(bids) == 1:
-            return 0.0
-        other_bids = [bid for i, bid in enumerate(bids) if i != winner]
-        return max(other_bids)
+    def payment(self, bids: List[float], allocations: List[int]) -> float:
+        if len(bids) < 2:
+            raise ValueError('Number of bidders is less than two')
+        other_bids = [bid for i, bid in enumerate(bids) if not allocations[i]]
+        payment =max(other_bids)
+        payments = np.where(allocations,payment,0.0)
+        return payments
 
 
 class FirstPriceAuction(AuctionMechanism):
     mechanism_type = "first_price"
     
     def allocate(self, bids: List[float]) -> Tuple[int, float]:
-        if not bids:
-            return None, 0.0
-        winner = np.argmax(bids)
-        return winner, 1.0
+        winner_idx = np.argmax(bids)
+        allocations = np.arange(len(bids)) == winner_idx
+        return allocations
     
-    def payment(self, bids: List[float], winner: int) -> float:
-        if not bids or winner is None:
-            return 0.0
-        return bids[winner]
+    def payment(self, bids: List[float], allocations: List[int]) -> float:
+        if len(bids) < 1:
+            raise ValueError('Number of bidders is less than two')
+        payment =max(bids)
+        payments = np.where(allocations,payment,0.0)
+        return payments
