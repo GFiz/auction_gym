@@ -1,0 +1,7 @@
+Metadata-Version: 2.1
+Name: auction_gym
+Version: 0.1.0
+Summary: A gym environment for RTB auction simulation and agent training
+Author: Your Name
+Requires-Dist: gymnasium
+Requires-Dist: numpy

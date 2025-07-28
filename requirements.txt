@@ -1,0 +1,5 @@
+gymnasium
+numpy
+pytest 
+torch
+ray[rllib]>=2.0.0
