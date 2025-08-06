@@ -35,8 +35,7 @@ class LinearBidder(TorchRLModule):
         """Setup method called by parent class."""
         self.theta = torch.nn.Parameter(torch.tensor(1.0, dtype=torch.float32))
     
-        pass
-    
+
     def _forward(self, batch: Dict[str, Any], **kwargs) -> Dict[str, Any]:
         """
         Forward pass that computes bid = observation * theta
