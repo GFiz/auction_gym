@@ -5,110 +5,73 @@ from gymnasium import spaces
 from abc import ABC, abstractmethod, ABCMeta
 from typing import Dict, Any, Optional
 from dataclasses import dataclass, field
-from ray.rllib.policy.torch_policy import TorchPolicy
+from ray.rllib.core.rl_module.torch import TorchRLModule
 from .valuation import ValuationMeta
 from .utility import UtilityMeta
-from .model import ModelMeta
 
 
-@dataclass
-class BidPolicyConfig:
-    """Simple configuration dataclass for BiddingAgent."""
-    valuation_type: str = "deterministic"
-    utility_type: str = "linear"
-    model_type: str = "linear"
-    is_trainable: bool = True
-    valuation_config: Dict[str, Any] = field(default_factory=lambda: {'value': 0.5})
-    utility_config: Dict[str, Any] = field(default_factory=dict)
-    model_config: Dict[str, Any] = field(default_factory=dict)
+class LinearBidder(TorchRLModule):
+    def __init__(self, observation_space, action_space, **kwargs):
+        """Initialize LinearBidder with the new RLlib API."""
+        # Extract required parameters for the new API
+        inference_only = kwargs.pop('inference_only', False)
+        model_config = kwargs.pop('model_config', {})
+        catalog_class = kwargs.pop('catalog_class', None)
+        
+        super().__init__(
+            observation_space=observation_space,
+            action_space=action_space,
+            inference_only=inference_only,
+            model_config=model_config,
+            catalog_class=catalog_class,
+            **kwargs
+        )
+        
+        # Initialize the learnable parameter theta
+        # Start with theta = 1.0 (bidding the full valuation)
+        
     
+    def setup(self):
+        """Setup method called by parent class."""
+        self.theta = torch.nn.Parameter(torch.tensor(1.0, dtype=torch.float32))
     
-
-class BidPolicy(TorchPolicy):
-    """Base class for bidding policies"""
+        pass
     
-    def __init__(self, observation_space, action_space, config):
+    def _forward(self, batch: Dict[str, Any], **kwargs) -> Dict[str, Any]:
         """
-        Initialize the agent as a TorchPolicy.
+        Forward pass that computes bid = observation * theta
         
         Args:
-            observation_space: The observation space for the environment.
-            action_space: The action space for the environment.
-            config: Configuration dictionary or BiddingAgentConfig object containing agent parameters.
-        """
-        # Store spaces explicitly
-        self.observation_space = observation_space
-        self.action_space = action_space
-        
-        # Initialize TorchPolicy
-        super().__init__(observation_space, action_space, config)
-        
-        # Convert dict to config if needed
-        if isinstance(config, dict):
-            self.config = BidPolicyConfig(**config)
-        else:
-            self.config = config
+            batch: Dictionary containing the observation
+            **kwargs: Additional arguments
             
-        # Extract agent-specific config
-        self.valuation_type = self.config.valuation_type
-        self.utility_type = self.config.utility_type
-        self.model_type = self.config.model_type
-        self._is_trainable = self.config.is_trainable
+        Returns:
+            Dictionary containing the computed bid
+        """
+        # Extract observation from batch
+        # The observation is typically the valuation or some representation of it
+        observation = batch.get("obs", batch.get("observations"))
         
-        # Create valuation and utility components
-        self.valuation = self._create_valuation()
-        self.utility = self._create_utility()
-        self.model = self._build_model()
-
-    def _build_model(self):
-        """Create the neural network model using the model registry."""
-        model_class = ModelMeta.get_model_class(self.model_type)
-        model = model_class(
-            self.observation_space,
-            self.action_space,
-            self.action_space.shape[0],  # num_outputs
-            self.config.model_config,
-            f"{self.model_type}_auction_model"
-        )
-        return model
-    
-    def _create_valuation(self):
-        """Create the valuation component."""
-        valuation_class = ValuationMeta.get_valuation_class(self.valuation_type)
-        return valuation_class(**self.config.valuation_config)
-    
-    def _create_utility(self):
-        """Create the utility component."""
-        utility_class = UtilityMeta.get_utility_class(self.utility_type)
-        return utility_class(**self.config.utility_config)
-    
-    # Additional utility methods
-    def get_model(self):
-        """Get the neural network model."""
-        return self.model
-    
-    def get_config(self):
-        """Get the agent configuration."""
-        return self.config
-    
-    @property
-    def is_trainable(self) -> bool:
-        """Check if this agent is trainable."""
-        return self._is_trainable
-    
-    def get_valuation_type(self) -> str:
-        """Get the valuation type."""
-        return self.valuation_type
-    
-    def get_utility_type(self) -> str:
-        """Get the utility type."""
-        return self.utility_type
-    
-    def get_model_type(self) -> str:
-        """Get the model type."""
-        return self.model_type
-
-    
-
-
-
+        # Handle None or missing observations
+        if observation is None:
+            raise ValueError("No observation provided in batch. Expected 'obs' or 'observations' key.")
+        
+        # Convert to tensor if it's not already
+        if not isinstance(observation, torch.Tensor):
+            observation = torch.tensor(observation, dtype=torch.float32)
+        
+        # Ensure observation has the right shape (batch_size, feature_dim)
+        if observation.dim() == 1:
+            observation = observation.unsqueeze(0)  # Add batch dimension
+        
+        # Compute bid: observation * theta
+        bid = observation * self.theta
+        
+        # Ensure bid is within valid range [0, 1] (clamp to action space bounds)
+        bid = torch.clamp(bid, 0.0, 1.0)
+        
+        return {
+            "action": bid,
+            "action_dist_inputs": bid  # For compatibility with RLlib
+        }
+        
