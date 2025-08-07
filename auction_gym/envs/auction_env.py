@@ -3,6 +3,7 @@ from gymnasium import spaces
 import numpy as np
 from typing import Dict, Any, Tuple, Optional, List
 from ray.rllib.env.multi_agent_env import MultiAgentEnv
+from ray.rllib.core.columns import Columns
 from auction_gym.core.mechanism import AuctionMechanism, SecondPriceAuction
 from auction_gym.core.valuation import BaseValuation
 from auction_gym.core.utility import BaseUtility
@@ -117,7 +118,7 @@ class AuctionEnv(MultiAgentEnv):
         
         # Generate new observation and info
         obs = self._get_observation(valuations)
-        info = self._get_info(allocations, payments, bids, valuations)
+        info = self._get_info()
         
         
         terminated_dict = {agent_key: terminated for agent_key in self.agents}
@@ -148,30 +149,10 @@ class AuctionEnv(MultiAgentEnv):
     
     def _get_observation(self,valuations) -> Dict[str,np.float32]:
         """Generate the current observation for the agents."""
-        # This is a placeholder. In a real environment, this would be meaningful data.
-        # Could include: time step, market conditions, historical data, etc.
         return {agent_key: valuations[i] for i,agent_key in enumerate(self.agents)}
 
-    def _get_info(self, allocations: Optional[np.ndarray] = None, payments: Optional[np.ndarray] = None, 
-                  bids: Optional[np.ndarray] = None, valuations: Optional[np.ndarray] = None) -> Dict[str, Any]:
-        """Generate info dictionary for the current step."""
-        info = {
-            "step": self.current_step,
-            "max_steps": self.max_steps,
-            "n_agents": self.n_agents,
-            "mechanism_type": self.mechanism.mechanism_type
-        }
-        
-        # Add step-specific info if provided
-        if allocations is not None:
-            info["allocations"] = allocations
-            info["payments"] = payments
-        if bids is not None:
-            info["bids"] = bids
-        if valuations is not None:
-            info["valuations"] = valuations
-            
-        return info
+    def _get_info(self) -> Dict[str, Any]:     
+        return {}
 
     def get_episode_summary(self) -> Dict[str, Any]:
         """Get a summary of the current episode."""

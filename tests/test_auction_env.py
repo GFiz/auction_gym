@@ -143,8 +143,6 @@ class TestAuctionEnvReset:
         # Check return format
         assert set(obs_dict.keys()) == {"agent_0", "agent_1"}
         
-        # Check that info_dict contains the correct top-level keys (from AuctionEnv._get_info)
-        assert set(info_dict.keys()) == {"step", "max_steps", "n_agents", "mechanism_type"}
         
         # Check observation format - should be numpy arrays, not dictionaries
         for obs in obs_dict.values():
@@ -212,7 +210,7 @@ class TestAuctionEnvStep:
         assert set(rewards_dict.keys()) == {"agent_0", "agent_1"}
         assert set(terminated_dict.keys()) == {"agent_0", "agent_1", "__all__"}
         assert set(truncated_dict.keys()) == {"agent_0", "agent_1", "__all__"}
-        assert set(info_dict.keys()) == {"step", "max_steps", "n_agents", "mechanism_type","allocations","payments","bids","valuations"}
+    
         
         # Check step increment
         assert self.env.current_step == 1
@@ -586,7 +584,7 @@ class TestAuctionEnvIntegration:
             assert set(rewards_dict.keys()) == {"agent_0", "agent_1", "agent_2"}
             assert set(terminated_dict.keys()) == {"agent_0", "agent_1", "agent_2", "__all__"}
             assert set(truncated_dict.keys()) == {"agent_0", "agent_1", "agent_2", "__all__"}
-            assert set(info_dict.keys()) == {"step", "max_steps", "n_agents", "mechanism_type","allocations","payments","bids","valuations"}
+            
             
             # Check step progression
             assert self.env.current_step == step + 1
