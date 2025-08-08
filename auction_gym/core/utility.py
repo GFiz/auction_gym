@@ -43,13 +43,10 @@ class LinearUtility(BaseUtility):
         else:
             return 0.0
 
-
-class RiskAverseUtility(BaseUtility):
-    utility_type = "risk_averse"
-    
+class TestUtility(BaseUtility):
+    utility_type = "test"
     def __call__(self, won: bool, valuation: float, payment: float) -> float:
         if won:
-            import numpy as np
-            return np.log(1 + valuation - payment)
+            return 1.0
         else:
-            return 0.0
+            return 0.0      

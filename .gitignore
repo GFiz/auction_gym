@@ -1,2 +1,9 @@
 __pycache__/
 playground.py
+experiments/vpg_test/*
+*.pkl
+*.json
+*.csv
+*.tfevents.*
+checkpoint_*/
+auction_gym/experiments/vpg_test/VPG_2025-08-08_16-14-12/.validate_storage_marker

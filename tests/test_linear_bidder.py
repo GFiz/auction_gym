@@ -4,12 +4,12 @@ import numpy as np
 from gymnasium import spaces
 from unittest.mock import Mock, patch, MagicMock
 
-from auction_gym.core.policy import LinearBidder
+from auction_gym.modules.linear_bidder import LBTorchRLModule
 from ray.rllib.core.columns import Columns
 
 
-class TestLinearBidderInitialization:
-    """Test LinearBidder initialization and setup."""
+class TestLBTorchRLModuleInitialization:
+    """Test LBTorchRLModule initialization and setup."""
     
     def setup_method(self):
         """Set up test fixtures."""
@@ -17,8 +17,8 @@ class TestLinearBidderInitialization:
         self.action_space = spaces.Box(low=0, high=1, shape=(1,), dtype=np.float32)
     
     def test_valid_initialization(self):
-        """Test that LinearBidder initializes correctly with valid parameters."""
-        bidder = LinearBidder(
+        """Test that LBTorchRLModule initializes correctly with valid parameters."""
+        bidder = LBTorchRLModule(
             observation_space=self.observation_space,
             action_space=self.action_space
         )
@@ -28,7 +28,7 @@ class TestLinearBidderInitialization:
     
     def test_initialization_with_kwargs(self):
         """Test initialization with additional keyword arguments."""
-        bidder = LinearBidder(
+        bidder = LBTorchRLModule(
             observation_space=self.observation_space,
             action_space=self.action_space,
             inference_only=True,
@@ -39,9 +39,9 @@ class TestLinearBidderInitialization:
         assert bidder.observation_space == self.observation_space
         assert bidder.action_space == self.action_space
     
-    def test_setup_method(self):
-        """Test that setup method initializes parameters correctly."""
-        bidder = LinearBidder(
+    def test_setup_method_default_initialization(self):
+        """Test that setup method initializes parameters with default values."""
+        bidder = LBTorchRLModule(
             observation_space=self.observation_space,
             action_space=self.action_space
         )
@@ -49,26 +49,116 @@ class TestLinearBidderInitialization:
         # Call setup manually since it's normally called by parent
         bidder.setup()
         
-        # Check that parameters are created and have correct values
+        # Check that parameters are created and have correct default values
         assert hasattr(bidder, 'mu')
-        assert hasattr(bidder, 'sigma')
+        assert hasattr(bidder, 'log_sigma')
         assert isinstance(bidder.mu, torch.nn.Parameter)
-        assert isinstance(bidder.sigma, torch.nn.Parameter)
+        assert isinstance(bidder.log_sigma, torch.nn.Parameter)
         assert bidder.mu.dtype == torch.float32
-        assert bidder.sigma.dtype == torch.float32
+        assert bidder.log_sigma.dtype == torch.float32
         assert torch.equal(bidder.mu, torch.tensor(1.0, dtype=torch.float32))
-        assert torch.equal(bidder.sigma, torch.tensor(1.0, dtype=torch.float32))
+        assert torch.equal(bidder.log_sigma, torch.tensor(0.0, dtype=torch.float32))
+    
+    def test_setup_method_custom_initial_mu(self):
+        """Test that setup method initializes mu with custom value."""
+        custom_mu = 2.5
+        bidder = LBTorchRLModule(
+            observation_space=self.observation_space,
+            action_space=self.action_space,
+            model_config={'initial_mu': custom_mu}
+        )
+        
+        bidder.setup()
+        
+        assert torch.equal(bidder.mu, torch.tensor(custom_mu, dtype=torch.float32))
+        assert torch.equal(bidder.log_sigma, torch.tensor(0.0, dtype=torch.float32))
+    
+    def test_setup_method_custom_initial_sigma(self):
+        """Test that setup method initializes log_sigma with custom value."""
+        custom_sigma = 1.5
+        bidder = LBTorchRLModule(
+            observation_space=self.observation_space,
+            action_space=self.action_space,
+            model_config={'initial_sigma': custom_sigma}
+        )
+        
+        bidder.setup()
+        
+        assert torch.equal(bidder.mu, torch.tensor(1.0, dtype=torch.float32))
+        assert torch.equal(bidder.log_sigma, torch.tensor(custom_sigma, dtype=torch.float32))
+    
+    def test_setup_method_custom_both_parameters(self):
+        """Test that setup method initializes both parameters with custom values."""
+        custom_mu = 3.0
+        custom_sigma = 2.0
+        bidder = LBTorchRLModule(
+            observation_space=self.observation_space,
+            action_space=self.action_space,
+            model_config={
+                'initial_mu': custom_mu,
+                'initial_sigma': custom_sigma
+            }
+        )
+        
+        bidder.setup()
+        
+        assert torch.equal(bidder.mu, torch.tensor(custom_mu, dtype=torch.float32))
+        assert torch.equal(bidder.log_sigma, torch.tensor(custom_sigma, dtype=torch.float32))
+    
+    def test_setup_method_none_values(self):
+        """Test that setup method handles None values correctly."""
+        bidder = LBTorchRLModule(
+            observation_space=self.observation_space,
+            action_space=self.action_space,
+            model_config={
+                'initial_mu': None,
+                'initial_sigma': None
+            }
+        )
+        
+        bidder.setup()
+        
+        # Should use default values when None is provided
+        assert torch.equal(bidder.mu, torch.tensor(1.0, dtype=torch.float32))
+        assert torch.equal(bidder.log_sigma, torch.tensor(0.0, dtype=torch.float32))
+    
+    def test_setup_method_missing_config_keys(self):
+        """Test that setup method handles missing config keys correctly."""
+        bidder = LBTorchRLModule(
+            observation_space=self.observation_space,
+            action_space=self.action_space,
+            model_config={}  # Empty config
+        )
+        
+        bidder.setup()
+        
+        # Should use default values when keys are missing
+        assert torch.equal(bidder.mu, torch.tensor(1.0, dtype=torch.float32))
+        assert torch.equal(bidder.log_sigma, torch.tensor(0.0, dtype=torch.float32))
+    
+    def test_parameter_requires_grad(self):
+        """Test that parameters are set up for gradient computation."""
+        bidder = LBTorchRLModule(
+            observation_space=self.observation_space,
+            action_space=self.action_space
+        )
+        
+        bidder.setup()
+        
+        # Parameters should require gradients for training
+        assert bidder.mu.requires_grad
+        assert bidder.log_sigma.requires_grad
 
 
-class TestLinearBidderForward:
-    """Test LinearBidder forward pass functionality for training (Gaussian Diagonal)."""
+class TestLBTorchRLModuleForward:
+    """Test LBTorchRLModule forward pass functionality for training (Gaussian Diagonal)."""
     
     def setup_method(self):
         """Set up test fixtures."""
         self.observation_space = spaces.Box(low=0, high=1, shape=(1,), dtype=np.float32)
         self.action_space = spaces.Box(low=0, high=1, shape=(1,), dtype=np.float32)
         
-        self.bidder = LinearBidder(
+        self.bidder = LBTorchRLModule(
             observation_space=self.observation_space,
             action_space=self.action_space
         )
@@ -105,7 +195,7 @@ class TestLinearBidderForward:
         # First column should be mean_logits = mu * observation
         # Second column should be log_std = log(sigma)
         expected_mean = self.bidder.mu * observations[0, 0]
-        expected_log_std = torch.log(self.bidder.sigma)
+        expected_log_std = self.bidder.log_sigma
         
         assert torch.isclose(action_params[0, 0], expected_mean)
         assert torch.isclose(action_params[0, 1], expected_log_std)
@@ -123,7 +213,7 @@ class TestLinearBidderForward:
         # Check that each row has correct computation
         for i in range(3):
             expected_mean = self.bidder.mu * observations[i, 0]
-            expected_log_std = torch.log(self.bidder.sigma)
+            expected_log_std = self.bidder.log_sigma
             
             assert torch.isclose(action_params[i, 0], expected_mean)
             assert torch.isclose(action_params[i, 1], expected_log_std)
@@ -151,18 +241,18 @@ class TestLinearBidderForward:
         
         # Check that parameters have gradients
         assert self.bidder.mu.grad is not None
-        assert self.bidder.sigma.grad is not None
+        assert self.bidder.log_sigma.grad is not None
 
 
-class TestLinearBidderForwardInference:
-    """Test LinearBidder forward inference functionality."""
+class TestLBTorchRLModuleForwardInference:
+    """Test LBTorchRLModule forward inference functionality."""
     
     def setup_method(self):
         """Set up test fixtures."""
         self.observation_space = spaces.Box(low=0, high=1, shape=(1,), dtype=np.float32)
         self.action_space = spaces.Box(low=0, high=1, shape=(1,), dtype=np.float32)
         
-        self.bidder = LinearBidder(
+        self.bidder = LBTorchRLModule(
             observation_space=self.observation_space,
             action_space=self.action_space
         )
@@ -241,15 +331,15 @@ class TestLinearBidderForwardInference:
         # Note: sigma is not used in inference, so it won't have gradients
 
 
-class TestLinearBidderParameterUpdates:
-    """Test LinearBidder parameter update functionality."""
+class TestLBTorchRLModuleParameterUpdates:
+    """Test LBTorchRLModule parameter update functionality."""
     
     def setup_method(self):
         """Set up test fixtures."""
         self.observation_space = spaces.Box(low=0, high=1, shape=(1,), dtype=np.float32)
         self.action_space = spaces.Box(low=0, high=1, shape=(1,), dtype=np.float32)
         
-        self.bidder = LinearBidder(
+        self.bidder = LBTorchRLModule(
             observation_space=self.observation_space,
             action_space=self.action_space
         )
@@ -258,17 +348,17 @@ class TestLinearBidderParameterUpdates:
     def test_parameter_initialization(self):
         """Test that parameters are initialized with correct values."""
         assert torch.equal(self.bidder.mu, torch.tensor(1.0, dtype=torch.float32))
-        assert torch.equal(self.bidder.sigma, torch.tensor(1.0, dtype=torch.float32))
+        assert torch.equal(self.bidder.log_sigma, torch.tensor(0.0, dtype=torch.float32))
     
     def test_parameter_modification(self):
         """Test that parameters can be modified."""
         # Modify parameters
         with torch.no_grad():
             self.bidder.mu.data.fill_(2.0)
-            self.bidder.sigma.data.fill_(0.5)
+            self.bidder.log_sigma.data.fill_(0.5)
         
         assert torch.equal(self.bidder.mu, torch.tensor(2.0, dtype=torch.float32))
-        assert torch.equal(self.bidder.sigma, torch.tensor(0.5, dtype=torch.float32))
+        assert torch.equal(self.bidder.log_sigma, torch.tensor(0.5, dtype=torch.float32))
     
     def test_parameter_gradient_flow_training(self):
         """Test that gradients flow through parameters correctly during training."""
@@ -284,12 +374,12 @@ class TestLinearBidderParameterUpdates:
         
         # Check gradients
         assert self.bidder.mu.grad is not None
-        assert self.bidder.sigma.grad is not None
+        assert self.bidder.log_sigma.grad is not None
         
         # mu gradient should be observation value
         assert torch.isclose(self.bidder.mu.grad, torch.tensor(0.5))
         # sigma gradient should be from log_std computation
-        assert self.bidder.sigma.grad is not None
+        assert self.bidder.log_sigma.grad is not None
     
     def test_parameter_gradient_flow_inference(self):
         """Test that gradients flow through parameters correctly during inference."""
@@ -311,15 +401,15 @@ class TestLinearBidderParameterUpdates:
         assert torch.isclose(self.bidder.mu.grad, torch.tensor(0.5))
 
 
-class TestLinearBidderEdgeCases:
-    """Test LinearBidder edge cases and error handling."""
+class TestLBTorchRLModuleEdgeCases:
+    """Test LBTorchRLModule edge cases and error handling."""
     
     def setup_method(self):
         """Set up test fixtures."""
         self.observation_space = spaces.Box(low=0, high=1, shape=(1,), dtype=np.float32)
         self.action_space = spaces.Box(low=0, high=1, shape=(1,), dtype=np.float32)
         
-        self.bidder = LinearBidder(
+        self.bidder = LBTorchRLModule(
             observation_space=self.observation_space,
             action_space=self.action_space
         )
@@ -423,15 +513,15 @@ class TestLinearBidderEdgeCases:
             self.bidder._forward_inference(batch)
 
 
-class TestLinearBidderIntegration:
-    """Integration tests for LinearBidder."""
+class TestLBTorchRLModuleIntegration:
+    """Integration tests for LBTorchRLModule."""
     
     def setup_method(self):
         """Set up test fixtures."""
         self.observation_space = spaces.Box(low=0, high=1, shape=(1,), dtype=np.float32)
         self.action_space = spaces.Box(low=0, high=1, shape=(1,), dtype=np.float32)
         
-        self.bidder = LinearBidder(
+        self.bidder = LBTorchRLModule(
             observation_space=self.observation_space,
             action_space=self.action_space
         )
@@ -440,11 +530,11 @@ class TestLinearBidderIntegration:
     def test_full_training_step(self):
         """Test a full training step with parameter updates."""
         # Create optimizer
-        optimizer = torch.optim.SGD([self.bidder.mu, self.bidder.sigma], lr=0.01)
+        optimizer = torch.optim.SGD([self.bidder.mu, self.bidder.log_sigma], lr=0.01)
         
         # Initial parameter values
         initial_mu = self.bidder.mu.clone()
-        initial_sigma = self.bidder.sigma.clone()
+        initial_sigma = self.bidder.log_sigma.clone()
         
         # Forward pass
         observations = torch.tensor([[0.5]], dtype=torch.float32)
@@ -463,7 +553,7 @@ class TestLinearBidderIntegration:
         
         # Check that parameters were updated
         assert not torch.equal(self.bidder.mu, initial_mu)
-        assert not torch.equal(self.bidder.sigma, initial_sigma)
+        assert not torch.equal(self.bidder.log_sigma, initial_sigma)
     
     def test_batch_processing_training(self):
         """Test processing multiple batches for training."""
@@ -496,7 +586,7 @@ class TestLinearBidderIntegration:
         # Modify parameters
         with torch.no_grad():
             self.bidder.mu.data.fill_(2.0)
-            self.bidder.sigma.data.fill_(0.5)
+            self.bidder.log_sigma.data.fill_(0.5)
         
         # Multiple forward passes for training
         for _ in range(5):
@@ -508,7 +598,7 @@ class TestLinearBidderIntegration:
             # Check that parameters remain the same
             assert torch.isclose(action_params[0, 0], torch.tensor(1.0))  # 2.0 * 0.5
             # Check log_std with more robust comparison
-            expected_log_std = torch.log(torch.tensor(0.5))
+            expected_log_std =torch.tensor(0.5)
             assert torch.isclose(action_params[0, 1], expected_log_std, atol=1e-6)
         
         # Multiple forward passes for inference
@@ -522,8 +612,8 @@ class TestLinearBidderIntegration:
             assert torch.isclose(actions[0, 0], torch.tensor(1.0))  # 2.0 * 0.5
 
 
-class TestLinearBidderCompatibility:
-    """Test LinearBidder compatibility with RLlib framework."""
+class TestLBTorchRLModuleCompatibility:
+    """Test LBTorchRLModule compatibility with RLlib framework."""
     
     def setup_method(self):
         """Set up test fixtures."""
@@ -531,8 +621,8 @@ class TestLinearBidderCompatibility:
         self.action_space = spaces.Box(low=0, high=1, shape=(1,), dtype=np.float32)
     
     def test_rllib_module_compatibility(self):
-        """Test that LinearBidder is compatible with RLlib module interface."""
-        bidder = LinearBidder(
+        """Test that LBTorchRLModule is compatible with RLlib module interface."""
+        bidder = LBTorchRLModule(
             observation_space=self.observation_space,
             action_space=self.action_space
         )
@@ -542,8 +632,8 @@ class TestLinearBidderCompatibility:
         assert isinstance(bidder, TorchRLModule)
     
     def test_columns_compatibility_training(self):
-        """Test that LinearBidder uses correct RLlib column names for training."""
-        bidder = LinearBidder(
+        """Test that LBTorchRLModule uses correct RLlib column names for training."""
+        bidder = LBTorchRLModule(
             observation_space=self.observation_space,
             action_space=self.action_space
         )
@@ -559,8 +649,8 @@ class TestLinearBidderCompatibility:
         assert Columns.ACTION_DIST_INPUTS in result
     
     def test_columns_compatibility_inference(self):
-        """Test that LinearBidder uses correct RLlib column names for inference."""
-        bidder = LinearBidder(
+        """Test that LBTorchRLModule uses correct RLlib column names for inference."""
+        bidder = LBTorchRLModule(
             observation_space=self.observation_space,
             action_space=self.action_space
         )
@@ -576,8 +666,8 @@ class TestLinearBidderCompatibility:
         assert Columns.ACTIONS in result
     
     def test_inference_only_mode(self):
-        """Test LinearBidder in inference-only mode."""
-        bidder = LinearBidder(
+        """Test LBTorchRLModule in inference-only mode."""
+        bidder = LBTorchRLModule(
             observation_space=self.observation_space,
             action_space=self.action_space,
             inference_only=True
@@ -597,15 +687,15 @@ class TestLinearBidderCompatibility:
         assert Columns.ACTIONS in result
 
 
-class TestLinearBidderPerformance:
-    """Performance tests for LinearBidder."""
+class TestLBTorchRLModulePerformance:
+    """Performance tests for LBTorchRLModule."""
     
     def setup_method(self):
         """Set up test fixtures."""
         self.observation_space = spaces.Box(low=0, high=1, shape=(1,), dtype=np.float32)
         self.action_space = spaces.Box(low=0, high=1, shape=(1,), dtype=np.float32)
         
-        self.bidder = LinearBidder(
+        self.bidder = LBTorchRLModule(
             observation_space=self.observation_space,
             action_space=self.action_space
         )
@@ -653,7 +743,7 @@ class TestLinearBidderPerformance:
     
     @pytest.mark.parametrize("batch_size", [1, 10, 100, 1000])
     def test_batch_size_scaling_training(self, batch_size):
-        """Test that LinearBidder scales with different batch sizes for training."""
+        """Test that LBTorchRLModule scales with different batch sizes for training."""
         observations = torch.randn(batch_size, 1, dtype=torch.float32)
         batch = {Columns.OBS: observations}
         
@@ -665,7 +755,7 @@ class TestLinearBidderPerformance:
     
     @pytest.mark.parametrize("batch_size", [1, 10, 100, 1000])
     def test_batch_size_scaling_inference(self, batch_size):
-        """Test that LinearBidder scales with different batch sizes for inference."""
+        """Test that LBTorchRLModule scales with different batch sizes for inference."""
         observations = torch.randn(batch_size, 1, dtype=torch.float32)
         batch = {Columns.OBS: observations}
         
@@ -676,7 +766,7 @@ class TestLinearBidderPerformance:
         assert actions.dtype == torch.float32
 
 
-class TestLinearBidderGaussianDiagonal:
+class TestLBTorchRLModuleGaussianDiagonal:
     """Specific tests for Gaussian Diagonal distribution format."""
     
     def setup_method(self):
@@ -684,7 +774,7 @@ class TestLinearBidderGaussianDiagonal:
         self.observation_space = spaces.Box(low=0, high=1, shape=(1,), dtype=np.float32)
         self.action_space = spaces.Box(low=0, high=1, shape=(1,), dtype=np.float32)
         
-        self.bidder = LinearBidder(
+        self.bidder = LBTorchRLModule(
             observation_space=self.observation_space,
             action_space=self.action_space
         )
@@ -707,7 +797,7 @@ class TestLinearBidderGaussianDiagonal:
         log_std = action_params[0, 1]
         
         # Check that log_std is actually log of sigma
-        expected_log_std = torch.log(self.bidder.sigma)
+        expected_log_std = self.bidder.log_sigma
         assert torch.isclose(log_std, expected_log_std)
     
     def test_gaussian_diagonal_parameter_ranges(self):
@@ -717,7 +807,7 @@ class TestLinearBidderGaussianDiagonal:
         
         for sigma_val in test_sigmas:
             with torch.no_grad():
-                self.bidder.sigma.data.fill_(sigma_val)
+                self.bidder.log_sigma.data.fill_(sigma_val)
             
             observations = torch.tensor([[0.5]], dtype=torch.float32)
             batch = {Columns.OBS: observations}
@@ -726,7 +816,7 @@ class TestLinearBidderGaussianDiagonal:
             action_params = result[Columns.ACTION_DIST_INPUTS]
             
             log_std = action_params[0, 1]
-            expected_log_std = torch.log(torch.tensor(sigma_val))
+            expected_log_std = torch.tensor(sigma_val)
             
             assert torch.isclose(log_std, expected_log_std)
     
@@ -741,7 +831,7 @@ class TestLinearBidderGaussianDiagonal:
         
         # All rows should have the same log_std value
         log_std_values = action_params[:, 1]
-        expected_log_std = torch.log(self.bidder.sigma)
+        expected_log_std = self.bidder.log_sigma
         
         for log_std in log_std_values:
             assert torch.isclose(log_std, expected_log_std) 
