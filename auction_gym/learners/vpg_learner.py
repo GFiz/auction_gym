@@ -47,15 +47,16 @@ class VPGTorchLearner(TorchLearner):
         # Compute the policy gradient loss.
         # Since we're not using a baseline, we use returns to go directly.
         loss = -torch.mean(log_probs * batch[Columns.RETURNS_TO_GO])
-
-        # Just for exercise, log the average return to go per discrete action.
-        for act, ret_to_go in zip(batch[Columns.ACTIONS], batch[Columns.RETURNS_TO_GO]):
-            self.metrics.log_value(
-                key=(module_id, f"action_{act}_return_to_go_mean"),
-                value=ret_to_go,
-                reduce="mean",
-                clear_on_reduce=True,
-            )
+        
+        #Not sensible for continuous action spaces
+        # # Just for exercise, log the average return to go per discrete action.
+        # for act, ret_to_go in zip(batch[Columns.ACTIONS], batch[Columns.RETURNS_TO_GO]):
+        #     self.metrics.log_value(
+        #         key=(module_id, f"action_{act}_return_to_go_mean"),
+        #         value=ret_to_go,
+        #         reduce="mean",
+        #         clear_on_reduce=True,
+        #     )
 
         return loss
 

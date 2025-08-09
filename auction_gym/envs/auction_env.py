@@ -125,7 +125,7 @@ class AuctionEnv(MultiAgentEnv):
         terminated_dict["__all__"] = terminated
         truncated_dict = {agent_key: truncated for agent_key in self.agents}
         truncated_dict["__all__"] = truncated
-        info = info
+    
         
         return obs, rewards, terminated_dict, truncated_dict, info
 

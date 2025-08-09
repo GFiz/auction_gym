@@ -69,6 +69,6 @@ class LBTorchRLModule(TorchRLModule):
             
         return {Columns.ACTIONS: self.mu * observations}
     
-    def get_train_action_dist_cls(self) -> Type[TorchDistribution]:
+    def get_inference_action_dist_cls(self) -> Type[TorchDistribution]:
         return TorchUnitIntervalGaussian
     
